@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { initializeBot } from './bot.js';
-import { initializeScheduler, checkAndNotifyUpcomingOutages, cleanOldNotifications } from './scheduler.js';
+import { initializeScheduler, checkAndNotifyUpcomingOutages, checkAndNotifyPowerReturns, cleanOldNotifications } from './scheduler.js';
 import { initializeAPI } from './api.js';
 import cron from 'node-cron';
 
@@ -72,6 +72,13 @@ async function start() {
   cron.schedule('*/5 * * * *', async () => {
     console.log('[Main] Running outage notification check...');
     await checkAndNotifyUpcomingOutages(bot);
+  });
+
+  // Check for power returns every 2 minutes
+  console.log('[Main] Setting up cron job for power return notifications (every 2 minutes)...');
+  cron.schedule('*/2 * * * *', async () => {
+    console.log('[Main] Running power return check...');
+    await checkAndNotifyPowerReturns(bot);
   });
 
   // Clean old notifications every day at 00:00

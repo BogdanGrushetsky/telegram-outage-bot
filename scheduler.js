@@ -167,25 +167,34 @@ export async function checkAndNotifyUpcomingOutages(bot) {
           continue;
         }
 
-        let periodsToCheck = [];
+        let allPeriodsToCheck = [];
         
-        if (Array.isArray(cacheEntry.rawSchedule) && cacheEntry.rawSchedule.length > 0) {
-          const today = cacheEntry.rawSchedule[0];
-          if (today && today.queues && today.queues[queue]) {
-            periodsToCheck = today.queues[queue];
+        if (Array.isArray(cacheEntry.rawSchedule)) {
+          for (const daySchedule of cacheEntry.rawSchedule) {
+            if (daySchedule && daySchedule.queues && daySchedule.queues[queue]) {
+              const periods = daySchedule.queues[queue];
+              const eventDate = daySchedule.eventDate || '';
+              
+              periods.forEach(period => {
+                allPeriodsToCheck.push({
+                  ...period,
+                  eventDate: eventDate
+                });
+              });
+            }
           }
         } else if (cacheEntry.rawSchedule.data) {
-          periodsToCheck = cacheEntry.rawSchedule.data;
+          allPeriodsToCheck = cacheEntry.rawSchedule.data;
         }
 
-        if (periodsToCheck.length === 0) {
+        if (allPeriodsToCheck.length === 0) {
           continue;
         }
 
         const now = new Date();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-        for (const period of periodsToCheck) {
+        for (const period of allPeriodsToCheck) {
           let startTime = null;
 
           if (period.from) {
@@ -206,13 +215,14 @@ export async function checkAndNotifyUpcomingOutages(bot) {
           const diffMinutes = periodMinutes - currentMinutes;
 
           if (user.timers.includes(diffMinutes)) {
-            const eventId = generateEventId(queue, startTime);
+            const eventId = generateEventId(queue, startTime, period.eventDate);
 
             if (user.notifiedEvents.includes(eventId)) {
               continue;
             }
 
-            const message = `⏰ Увага! Відключення світла\n\n⚡ Черга: ${queue}\n🕐 Початок: ${startTime}\n⏳ Залишилось: ${diffMinutes} хв`;
+            const dateInfo = period.eventDate ? `\n📅 Дата: ${period.eventDate}` : '';
+            const message = `⏰ Увага! Відключення світла\n\n⚡ Черга: ${queue}${dateInfo}\n🕐 Початок: ${startTime}\n⏳ Залишилось: ${diffMinutes} хв`;
 
             try {
               await bot.sendMessage(user.telegramId, message);
@@ -235,6 +245,110 @@ export async function checkAndNotifyUpcomingOutages(bot) {
     }
   } catch (error) {
     console.error('[Scheduler] Error in checkAndNotifyUpcomingOutages:', error);
+  }
+}
+
+/**
+ * Check and notify when power returns (outage ends)
+ */
+export async function checkAndNotifyPowerReturns(bot) {
+  try {
+    const users = await User.find({ notificationsEnabled: true });
+    console.log(`[Scheduler] Checking power returns for ${users.length} users`);
+
+    let notificationsSent = 0;
+
+    for (const user of users) {
+      if (user.queues.length === 0) {
+        continue;
+      }
+
+      for (const queue of user.queues) {
+        const cacheEntry = await ScheduleCache.findOne({ queue });
+
+        if (!cacheEntry || !cacheEntry.rawSchedule) {
+          continue;
+        }
+
+        let allPeriodsToCheck = [];
+        
+        if (Array.isArray(cacheEntry.rawSchedule)) {
+          for (const daySchedule of cacheEntry.rawSchedule) {
+            if (daySchedule && daySchedule.queues && daySchedule.queues[queue]) {
+              const periods = daySchedule.queues[queue];
+              const eventDate = daySchedule.eventDate || '';
+              
+              periods.forEach(period => {
+                allPeriodsToCheck.push({
+                  ...period,
+                  eventDate: eventDate
+                });
+              });
+            }
+          }
+        } else if (cacheEntry.rawSchedule.data) {
+          allPeriodsToCheck = cacheEntry.rawSchedule.data;
+        }
+
+        if (allPeriodsToCheck.length === 0) {
+          continue;
+        }
+
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        for (const period of allPeriodsToCheck) {
+          let endTime = null;
+
+          if (period.to) {
+            endTime = period.to;
+          } else if (period.shutdownHours) {
+            const match = period.shutdownHours.match(/-(\d{2}:\d{2})$/);
+            if (match) {
+              endTime = match[1];
+            }
+          }
+
+          if (!endTime) {
+            continue;
+          }
+
+          const [hour, min] = endTime.split(':').map(Number);
+          const endMinutes = hour * 60 + min;
+          
+          const diffMinutes = currentMinutes - endMinutes;
+          
+          if (diffMinutes >= 0 && diffMinutes <= 2) {
+            const eventId = `power_return_${generateEventId(queue, endTime, period.eventDate)}`;
+
+            if (user.notifiedEvents.includes(eventId)) {
+              continue;
+            }
+
+            const dateInfo = period.eventDate ? `\n📅 Дата: ${period.eventDate}` : '';
+            const message = `✅ Світло повернулось!\n\n⚡ Черга: ${queue}${dateInfo}\n🕐 Час: ${endTime}\n💡 Відключення завершено`;
+
+            try {
+              await bot.sendMessage(user.telegramId, message);
+
+              user.notifiedEvents.push(eventId);
+              await user.save();
+              
+              notificationsSent++;
+              console.log(`[Scheduler] 💡 Sent power return notification to user ${user.telegramId} for queue ${queue} at ${endTime}`);
+            } catch (error) {
+              console.error(`[Scheduler] Error sending power return notification to ${user.telegramId}:`, error.message);
+            }
+          }
+        }
+      }
+    }
+
+    if (notificationsSent > 0) {
+      console.log(`[Scheduler] ✅ Sent ${notificationsSent} power return notifications`);
+    }
+  } catch (error) {
+    console.error('[Scheduler] Error in checkAndNotifyPowerReturns:', error);
   }
 }
 

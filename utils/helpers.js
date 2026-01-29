@@ -51,49 +51,60 @@ export function isPowerOffNow(schedule) {
 /**
  * Generate event ID for tracking notifications
  * @param {string} queue - Queue identifier
- * @param {string} startTime - Start time of the outage
+ * @param {string} time - Start or end time of the outage
+ * @param {string} date - Optional date (e.g., "29.01.2026")
  * @returns {string} Unique event ID
  */
-export function generateEventId(queue, startTime) {
-  return `${queue}_${startTime}`;
+export function generateEventId(queue, time, date = '') {
+  if (date) {
+    return `${queue}_${time}_${date}`;
+  }
+  return `${queue}_${time}`;
 }
 
 /**
- * Format schedule data for user display
+ * Format schedule data for user display (supports multi-day schedules)
  * @param {Object|Array} rawSchedule - The raw schedule data from API (array format)
  * @param {string} queue - Queue identifier
  * @returns {string} Formatted schedule text
  */
 export function formatScheduleText(rawSchedule, queue) {
-  // Handle new API format (array with queues object)
+  // Handle new API format (array with queues object) - MULTI-DAY SUPPORT
   if (Array.isArray(rawSchedule) && rawSchedule.length > 0) {
-    const today = rawSchedule[0];
-    
-    if (!today || !today.queues || !today.queues[queue]) {
-      return `⚡ Черга ${queue}: Немає доступних даних`;
+    let fullText = `⚡ Черга ${queue}:\n\n`;
+    let hasAnyOutages = false;
+
+    for (const daySchedule of rawSchedule) {
+      if (!daySchedule || !daySchedule.queues || !daySchedule.queues[queue]) {
+        continue;
+      }
+
+      const scheduleForQueue = daySchedule.queues[queue];
+      const eventDate = daySchedule.eventDate || 'Сьогодні';
+
+      fullText += `📅 ${eventDate}\n`;
+
+      // Check if there are any outages for this day
+      if (!Array.isArray(scheduleForQueue) || scheduleForQueue.length === 0) {
+        fullText += `🟢 Відключення не заплановані\n`;
+      } else {
+        hasAnyOutages = true;
+        // Format outages
+        scheduleForQueue.forEach((outage) => {
+          const status = outage.status === 1 ? '🔴' : '🟢';
+          const time = outage.shutdownHours || `${outage.from}-${outage.to}`;
+          fullText += `${status} ${time}\n`;
+        });
+      }
+
+      if (daySchedule.scheduleApprovedSince) {
+        fullText += `✅ Затверджено: ${daySchedule.scheduleApprovedSince}\n`;
+      }
+
+      fullText += '\n';
     }
 
-    const scheduleForQueue = today.queues[queue];
-    
-    // Check if there are any outages
-    if (!Array.isArray(scheduleForQueue) || scheduleForQueue.length === 0) {
-      return `⚡ Черга ${queue}: Відключення не заплановані\n📅 Дата: ${today.eventDate || 'Сьогодні'}`;
-    }
-
-    // Format outages
-    let text = `⚡ Черга ${queue}:\n`;
-    text += `📅 Дата: ${today.eventDate || 'Сьогодні'}\n`;
-    
-    scheduleForQueue.forEach((outage, index) => {
-      const status = outage.status === 1 ? '🔴' : '🟢';
-      text += `${status} ${outage.shutdownHours || `${outage.from}-${outage.to}`}\n`;
-    });
-
-    if (today.scheduleApprovedSince) {
-      text += `\n✅ Графік затверджено: ${today.scheduleApprovedSince}`;
-    }
-
-    return text;
+    return fullText.trim();
   }
 
   // Handle old format (for backward compatibility)
