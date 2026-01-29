@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:7-alpine
+    container_name: power-outage-bot-mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: power-outage-bot
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - bot-network
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: power-outage-bot
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      MONGODB_URI: mongodb://mongo:27017/power-outage-bot
+      API_PORT: 3000
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ['GET', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - bot-network
+
+volumes:
+  mongo_data:
+    driver: local
+
+networks:
+  bot-network:
+    driver: bridge

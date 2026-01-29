@@ -1,0 +1,70 @@
+import TelegramBot from 'node-telegram-bot-api';
+import ScheduleCache from './models/ScheduleCache.js';
+import {
+  handleStart,
+  handleQueues,
+  handleTimers,
+  handleStatus,
+  handleSettings,
+  handleQueueCallback,
+  handleTimerCallback,
+  handleSettingsCallback,
+} from './telegram/handlers.js';
+
+/**
+ * Initialize Telegram bot
+ */
+export function initializeBot(token) {
+  const bot = new TelegramBot(token, { polling: true });
+
+  console.log('[Bot] Telegram bot initialized');
+
+  // Register commands
+  bot.onText(/\/start/, (msg) => handleStart(bot, msg));
+  bot.onText(/\/queues/, (msg) => handleQueues(bot, msg));
+  bot.onText(/\/timers/, (msg) => handleTimers(bot, msg));
+  bot.onText(/\/status/, (msg) => handleStatus(bot, msg, ScheduleCache));
+  bot.onText(/\/settings/, (msg) => handleSettings(bot, msg));
+
+  // Handle keyboard button texts (Ukrainian)
+  bot.onText(/📊 Поточний статус/, (msg) => handleStatus(bot, msg, ScheduleCache));
+  bot.onText(/⚙️ Налаштування/, (msg) => handleSettings(bot, msg));
+
+  // Handle callback queries (button clicks)
+  bot.on('callback_query', async (query) => {
+    const callbackData = query.data;
+    console.log(`[Bot] Callback query received: ${callbackData}`);
+
+    try {
+      if (callbackData.startsWith('queue_')) {
+        await handleQueueCallback(bot, query, callbackData);
+      } else if (callbackData.startsWith('timer_')) {
+        await handleTimerCallback(bot, query, callbackData);
+      } else if (callbackData.startsWith('settings_') || callbackData === 'back_to_menu') {
+        await handleSettingsCallback(bot, query, callbackData);
+      } else {
+        console.warn(`[Bot] Unknown callback data: ${callbackData}`);
+        await bot.answerCallbackQuery(query.id, '❌ Невідома команда');
+      }
+    } catch (error) {
+      console.error('[Bot] Error handling callback query:', error);
+      await bot.answerCallbackQuery(query.id, '❌ Сталася помилка').catch(() => {});
+    }
+  });
+
+  // Handle polling errors
+  bot.on('polling_error', (error) => {
+    console.error('[Bot] Polling error:', error.message);
+  });
+
+  // Handle webhook errors (if using webhooks)
+  bot.on('webhook_error', (error) => {
+    console.error('[Bot] Webhook error:', error.message);
+  });
+
+  console.log('[Bot] All commands registered');
+  console.log('[Bot] Commands: /start, /queues, /timers, /status, /settings');
+  console.log('[Bot] Keyboard buttons: 📊 Поточний статус, ⚙️ Налаштування');
+
+  return bot;
+}
