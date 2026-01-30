@@ -53,11 +53,18 @@ async function updateAllSchedules(bot) {
 
         console.log(`[Scheduler] ✅ Fetched schedule for queue ${queue}`);
         
-        const newHash = hashSchedule(newSchedule);
+        const filteredSchedule = filterFutureDays(newSchedule);
+        const newHash = hashSchedule(filteredSchedule);
         const cacheEntry = await ScheduleCache.findOne({ queue });
 
         if (cacheEntry && cacheEntry.hash === newHash) {
           console.log(`[Scheduler] ✓ No changes for queue ${queue} (hash match)`);
+          
+          await ScheduleCache.findOneAndUpdate(
+            { queue },
+            { rawSchedule: newSchedule, updatedAt: new Date() }
+          );
+          
           continue;
         }
 
@@ -95,6 +102,37 @@ async function updateAllSchedules(bot) {
   } catch (error) {
     console.error('[Scheduler] Error in updateAllSchedules:', error);
   }
+}
+
+/**
+ * Filter schedule to only include today and future days
+ * This prevents false positives when yesterday's data is removed
+ */
+function filterFutureDays(schedule) {
+  if (!Array.isArray(schedule)) {
+    return schedule;
+  }
+
+  const today = new Date();
+  const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+  
+  console.log(`[Scheduler] Filtering schedule, today is: ${todayStr}`);
+
+  const filtered = schedule.filter(day => {
+    if (!day.eventDate) return true;
+    
+    const [dayNum, monthNum, yearNum] = day.eventDate.split('.').map(Number);
+    const eventDate = new Date(yearNum, monthNum - 1, dayNum);
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    const isFuture = eventDate >= todayDate;
+    console.log(`[Scheduler] Date ${day.eventDate}: ${isFuture ? 'keeping' : 'filtering out'}`);
+    
+    return isFuture;
+  });
+
+  console.log(`[Scheduler] Filtered ${schedule.length} days to ${filtered.length} days`);
+  return filtered;
 }
 
 /**
@@ -256,6 +294,9 @@ export async function checkAndNotifyPowerReturns(bot) {
     const users = await User.find({ notificationsEnabled: true });
     console.log(`[Scheduler] Checking power returns for ${users.length} users`);
 
+    const today = new Date();
+    const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+
     let notificationsSent = 0;
 
     for (const user of users) {
@@ -277,6 +318,11 @@ export async function checkAndNotifyPowerReturns(bot) {
             if (daySchedule && daySchedule.queues && daySchedule.queues[queue]) {
               const periods = daySchedule.queues[queue];
               const eventDate = daySchedule.eventDate || '';
+              
+              if (eventDate !== todayStr) {
+                console.log(`[Scheduler] Skipping power return check for ${eventDate} (not today)`);
+                continue;
+              }
               
               periods.forEach(period => {
                 allPeriodsToCheck.push({
