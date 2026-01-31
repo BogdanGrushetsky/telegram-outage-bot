@@ -74,7 +74,19 @@ export function formatScheduleText(rawSchedule, queue) {
     let fullText = `⚡ Черга ${queue}:\n\n`;
     let hasAnyOutages = false;
 
-    for (const daySchedule of rawSchedule) {
+    const sortedSchedule = [...rawSchedule].sort((a, b) => {
+      if (!a.eventDate || !b.eventDate) return 0;
+      
+      const [dayA, monthA, yearA] = a.eventDate.split('.').map(Number);
+      const [dayB, monthB, yearB] = b.eventDate.split('.').map(Number);
+      
+      const dateA = new Date(yearA, monthA - 1, dayA);
+      const dateB = new Date(yearB, monthB - 1, dayB);
+      
+      return dateA - dateB;
+    });
+
+    for (const daySchedule of sortedSchedule) {
       if (!daySchedule || !daySchedule.queues || !daySchedule.queues[queue]) {
         continue;
       }

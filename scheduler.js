@@ -54,22 +54,33 @@ async function updateAllSchedules(bot) {
         console.log(`[Scheduler] ✅ Fetched schedule for queue ${queue}`);
         
         const filteredSchedule = filterFutureDays(newSchedule);
+        
+        if (Array.isArray(filteredSchedule) && filteredSchedule.length === 0) {
+          console.warn(`[Scheduler] ⚠️ No future days in schedule for queue ${queue}!`);
+          continue;
+        }
+        
         const newHash = hashSchedule(filteredSchedule);
         const cacheEntry = await ScheduleCache.findOne({ queue });
 
         if (cacheEntry && cacheEntry.hash === newHash) {
-          console.log(`[Scheduler] ✓ No changes for queue ${queue} (hash match)`);
+          console.log(`[Scheduler] ✓ No changes for queue ${queue} (hash match: ${newHash.substring(0, 8)}...)`);
           
           await ScheduleCache.findOneAndUpdate(
             { queue },
             { rawSchedule: newSchedule, updatedAt: new Date() }
           );
           
+          console.log(`[Scheduler] Updated rawSchedule for queue ${queue} (keeping same hash)`);
           continue;
         }
 
         const isFirstTime = !cacheEntry;
+        const oldHash = cacheEntry ? cacheEntry.hash?.substring(0, 8) : 'none';
+        const newHashShort = newHash.substring(0, 8);
+        
         console.log(`[Scheduler] 📢 Schedule ${isFirstTime ? 'initialized' : 'CHANGED'} for queue ${queue}`);
+        console.log(`[Scheduler] Hash: ${oldHash}... → ${newHashShort}...`);
 
         const updatedCache = await ScheduleCache.findOneAndUpdate(
           { queue },
@@ -119,19 +130,36 @@ function filterFutureDays(schedule) {
   console.log(`[Scheduler] Filtering schedule, today is: ${todayStr}`);
 
   const filtered = schedule.filter(day => {
-    if (!day.eventDate) return true;
+    if (!day.eventDate) {
+      console.log(`[Scheduler] Day without eventDate, keeping it`);
+      return true;
+    }
     
     const [dayNum, monthNum, yearNum] = day.eventDate.split('.').map(Number);
     const eventDate = new Date(yearNum, monthNum - 1, dayNum);
+    eventDate.setHours(0, 0, 0, 0);
+    
     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    todayDate.setHours(0, 0, 0, 0);
     
     const isFuture = eventDate >= todayDate;
-    console.log(`[Scheduler] Date ${day.eventDate}: ${isFuture ? 'keeping' : 'filtering out'}`);
+    
+    if (isFuture) {
+      console.log(`[Scheduler] ✓ Date ${day.eventDate}: keeping (today or future)`);
+    } else {
+      console.log(`[Scheduler] ✗ Date ${day.eventDate}: filtering out (past)`);
+    }
     
     return isFuture;
   });
 
-  console.log(`[Scheduler] Filtered ${schedule.length} days to ${filtered.length} days`);
+  console.log(`[Scheduler] Filtered ${schedule.length} days to ${filtered.length} days (kept: ${filtered.map(d => d.eventDate).join(', ')})`);
+  
+  if (filtered.length === 0 && schedule.length > 0) {
+    console.warn(`[Scheduler] ⚠️ WARNING: All days were filtered out! This might indicate a problem with date parsing.`);
+    console.warn(`[Scheduler] Original dates:`, schedule.map(d => d.eventDate));
+  }
+  
   return filtered;
 }
 
@@ -191,6 +219,11 @@ export async function checkAndNotifyUpcomingOutages(bot) {
     const users = await User.find({ notificationsEnabled: true });
     console.log(`[Scheduler] Checking upcoming outages for ${users.length} users`);
 
+    const now = new Date();
+    const todayStr = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+    
+    console.log(`[Scheduler] Today is: ${todayStr}, current time: ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`);
+
     let notificationsSent = 0;
 
     for (const user of users) {
@@ -210,8 +243,14 @@ export async function checkAndNotifyUpcomingOutages(bot) {
         if (Array.isArray(cacheEntry.rawSchedule)) {
           for (const daySchedule of cacheEntry.rawSchedule) {
             if (daySchedule && daySchedule.queues && daySchedule.queues[queue]) {
-              const periods = daySchedule.queues[queue];
               const eventDate = daySchedule.eventDate || '';
+              
+              if (eventDate !== todayStr) {
+                console.log(`[Scheduler] Skipping upcoming outage check for ${eventDate} (not today: ${todayStr})`);
+                continue;
+              }
+              
+              const periods = daySchedule.queues[queue];
               
               periods.forEach(period => {
                 allPeriodsToCheck.push({
@@ -219,17 +258,19 @@ export async function checkAndNotifyUpcomingOutages(bot) {
                   eventDate: eventDate
                 });
               });
+              
+              console.log(`[Scheduler] Found ${periods.length} periods for today (${eventDate}) in queue ${queue}`);
             }
           }
         } else if (cacheEntry.rawSchedule.data) {
-          allPeriodsToCheck = cacheEntry.rawSchedule.data;
+          allPeriodsToCheck = cacheEntry.rawSchedule.data.map(p => ({...p, eventDate: todayStr}));
         }
 
         if (allPeriodsToCheck.length === 0) {
+          console.log(`[Scheduler] No outages scheduled for TODAY (${todayStr}) in queue ${queue}`);
           continue;
         }
 
-        const now = new Date();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
         for (const period of allPeriodsToCheck) {
@@ -252,10 +293,13 @@ export async function checkAndNotifyUpcomingOutages(bot) {
           const periodMinutes = hour * 60 + min;
           const diffMinutes = periodMinutes - currentMinutes;
 
+          console.log(`[Scheduler] Queue ${queue}, start: ${startTime}, current: ${now.getHours()}:${now.getMinutes()}, diff: ${diffMinutes}min`);
+
           if (user.timers.includes(diffMinutes)) {
             const eventId = generateEventId(queue, startTime, period.eventDate);
 
             if (user.notifiedEvents.includes(eventId)) {
+              console.log(`[Scheduler] Already notified about ${eventId}`);
               continue;
             }
 
@@ -269,7 +313,7 @@ export async function checkAndNotifyUpcomingOutages(bot) {
               await user.save();
               
               notificationsSent++;
-              console.log(`[Scheduler] ⏰ Sent upcoming outage notification to user ${user.telegramId} for queue ${queue} at ${startTime}`);
+              console.log(`[Scheduler] ⏰ Sent upcoming outage notification to user ${user.telegramId} for queue ${queue} at ${startTime} (${diffMinutes}min before)`);
             } catch (error) {
               console.error(`[Scheduler] Error sending upcoming notification to ${user.telegramId}:`, error.message);
             }
@@ -280,6 +324,8 @@ export async function checkAndNotifyUpcomingOutages(bot) {
 
     if (notificationsSent > 0) {
       console.log(`[Scheduler] ✅ Sent ${notificationsSent} upcoming outage notifications`);
+    } else {
+      console.log(`[Scheduler] ✓ No upcoming outages to notify about`);
     }
   } catch (error) {
     console.error('[Scheduler] Error in checkAndNotifyUpcomingOutages:', error);
@@ -294,8 +340,8 @@ export async function checkAndNotifyPowerReturns(bot) {
     const users = await User.find({ notificationsEnabled: true });
     console.log(`[Scheduler] Checking power returns for ${users.length} users`);
 
-    const today = new Date();
-    const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+    const now = new Date();
+    const todayStr = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
 
     let notificationsSent = 0;
 
@@ -319,8 +365,10 @@ export async function checkAndNotifyPowerReturns(bot) {
               const periods = daySchedule.queues[queue];
               const eventDate = daySchedule.eventDate || '';
               
-              if (eventDate !== todayStr) {
-                console.log(`[Scheduler] Skipping power return check for ${eventDate} (not today)`);
+              const shouldCheck = isEventRelevantForPowerReturn(eventDate, todayStr);
+              
+              if (!shouldCheck) {
+                console.log(`[Scheduler] Skipping power return check for ${eventDate} (not relevant for today)`);
                 continue;
               }
               
@@ -340,7 +388,6 @@ export async function checkAndNotifyPowerReturns(bot) {
           continue;
         }
 
-        const now = new Date();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
         for (const period of allPeriodsToCheck) {
@@ -362,9 +409,24 @@ export async function checkAndNotifyPowerReturns(bot) {
           const [hour, min] = endTime.split(':').map(Number);
           const endMinutes = hour * 60 + min;
           
-          const diffMinutes = currentMinutes - endMinutes;
+          let shouldNotify = false;
           
-          if (diffMinutes >= 0 && diffMinutes <= 2) {
+          if (endMinutes <= 60) {
+            const diffMinutes = currentMinutes - endMinutes;
+            
+            if (diffMinutes >= 0 && diffMinutes <= 2) {
+              shouldNotify = true;
+              console.log(`[Scheduler] Midnight transition detected: end=${endTime}, current=${now.getHours()}:${now.getMinutes()}, diff=${diffMinutes}min`);
+            }
+          } else {
+            const diffMinutes = currentMinutes - endMinutes;
+            
+            if (diffMinutes >= 0 && diffMinutes <= 2) {
+              shouldNotify = true;
+            }
+          }
+          
+          if (shouldNotify) {
             const eventId = `power_return_${generateEventId(queue, endTime, period.eventDate)}`;
 
             if (user.notifiedEvents.includes(eventId)) {
@@ -396,6 +458,41 @@ export async function checkAndNotifyPowerReturns(bot) {
   } catch (error) {
     console.error('[Scheduler] Error in checkAndNotifyPowerReturns:', error);
   }
+}
+
+/**
+ * Check if event is relevant for power return check today
+ * Handles midnight transitions correctly
+ */
+function isEventRelevantForPowerReturn(eventDate, todayStr) {
+  if (!eventDate) return true;
+  
+  if (eventDate === todayStr) {
+    return true;
+  }
+  
+  const [todayDay, todayMonth, todayYear] = todayStr.split('.').map(Number);
+  const [eventDay, eventMonth, eventYear] = eventDate.split('.').map(Number);
+  
+  const todayDate = new Date(todayYear, todayMonth - 1, todayDay);
+  const eventDateObj = new Date(eventYear, eventMonth - 1, eventDay);
+  
+  const yesterday = new Date(todayDate);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const isYesterday = eventDateObj.getTime() === yesterday.getTime();
+  
+  if (isYesterday) {
+    const now = new Date();
+    const currentHour = now.getHours();
+    
+    if (currentHour === 0) {
+      console.log(`[Scheduler] Event from yesterday (${eventDate}) is relevant - checking for midnight transitions`);
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 /**
