@@ -60,7 +60,11 @@ async function updateAllSchedules(bot) {
           continue;
         }
         
-        const newHash = hashSchedule(filteredSchedule);
+        const outageDataOnly = extractOutageDataOnly(filteredSchedule);
+        const newHash = hashSchedule(outageDataOnly);
+        
+        console.log(`[Scheduler] Computing hash from outage data only (excluding metadata)`);
+        
         const cacheEntry = await ScheduleCache.findOne({ queue });
 
         if (cacheEntry && cacheEntry.hash === newHash) {
@@ -113,6 +117,45 @@ async function updateAllSchedules(bot) {
   } catch (error) {
     console.error('[Scheduler] Error in updateAllSchedules:', error);
   }
+}
+
+/**
+ * Extract only outage data from schedule (excluding metadata)
+ * This prevents false positives when metadata like scheduleApprovedSince changes
+ * @param {Array} schedule - Filtered schedule array
+ * @returns {Array} Schedule with only essential outage data
+ */
+function extractOutageDataOnly(schedule) {
+  if (!Array.isArray(schedule)) {
+    return schedule;
+  }
+
+  return schedule.map(day => {
+    if (!day.eventDate || !day.queues) {
+      return day;
+    }
+
+    const cleanDay = {
+      eventDate: day.eventDate,
+      queues: {}
+    };
+
+    for (const [queueId, periods] of Object.entries(day.queues)) {
+      if (!Array.isArray(periods)) {
+        cleanDay.queues[queueId] = periods;
+        continue;
+      }
+
+      cleanDay.queues[queueId] = periods.map(period => ({
+        from: period.from,
+        to: period.to,
+        shutdownHours: period.shutdownHours,
+        status: period.status
+      }));
+    }
+
+    return cleanDay;
+  });
 }
 
 /**
