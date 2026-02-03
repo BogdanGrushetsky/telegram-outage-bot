@@ -20,7 +20,7 @@ import {
   sendNotification,
   markEventAsNotified,
   isEventNotified,
-  cleanOldNotifications,
+  cleanOldNotifications as cleanOldNotificationsService,
   createScheduleUpdateMessage,
   createUpcomingOutageMessage,
   createPowerReturnMessage,
@@ -358,7 +358,7 @@ export async function checkAndNotifyPowerReturns(bot) {
  */
 export async function cleanOldNotifications() {
   try {
-    await cleanOldNotifications(TIMING.NOTIFICATION_RETENTION_HOURS);
+    await cleanOldNotificationsService(TIMING.NOTIFICATION_RETENTION_HOURS);
   } catch (error) {
     console.error(`${LOG_PREFIX.SCHEDULER} Error in cleanOldNotifications:`, error);
   }
