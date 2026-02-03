@@ -1,5 +1,10 @@
 import mongoose from 'mongoose';
+import { VALID_QUEUES } from '../config/constants.js';
 
+/**
+ * ScheduleCache Schema
+ * Stores cached electricity outage schedules for each queue
+ */
 const scheduleCacheSchema = new mongoose.Schema(
   {
     queue: {
@@ -7,15 +12,18 @@ const scheduleCacheSchema = new mongoose.Schema(
       required: true,
       unique: true,
       index: true,
-      enum: ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'],
+      enum: VALID_QUEUES,
+      description: 'Electricity queue identifier',
     },
     hash: {
       type: String,
       default: null,
+      description: 'Hash of schedule data for change detection',
     },
     rawSchedule: {
       type: mongoose.Schema.Types.Mixed,
       default: null,
+      description: 'Raw schedule data from API',
     },
   },
   {

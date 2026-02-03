@@ -1,36 +1,47 @@
 import axios from 'axios';
+import { LOG_PREFIX } from '../config/constants.js';
 
 const API_BASE_URL = 'https://be-svitlo.oe.if.ua';
+const API_TIMEOUT = 10000; // 10 seconds
 
 /**
  * Fetch schedule from the official API
  * @param {string} queue - Queue identifier (e.g., "5.2")
- * @returns {Promise<Object>} Schedule data or null if request fails
+ * @returns {Promise<Object|null>} Schedule data or null if request fails
  */
 export async function fetchSchedule(queue) {
   try {
-    console.log(`[API] Fetching schedule from ${API_BASE_URL}/schedule-by-queue?queue=${queue}`);
+    console.log(`${LOG_PREFIX.API} Fetching schedule from ${API_BASE_URL}/schedule-by-queue?queue=${queue}`);
     const startTime = Date.now();
-    
+
     const response = await axios.get(`${API_BASE_URL}/schedule-by-queue`, {
       params: { queue },
-      timeout: 10000,
+      timeout: API_TIMEOUT,
+      headers: {
+        'User-Agent': 'Ukraine-Power-Outage-Bot/1.0',
+      },
     });
 
     const duration = Date.now() - startTime;
-    console.log(`[API] ✅ Response received for queue ${queue} (${duration}ms), status: ${response.status}`);
-    console.log(`[API] Response data:`, JSON.stringify(response.data).substring(0, 200));
+    console.log(`${LOG_PREFIX.API} ✅ Response received for queue ${queue} (${duration}ms), status: ${response.status}`);
 
     if (response.status === 200 && response.data) {
       return response.data;
     }
 
-    console.warn(`[API] ⚠️ Invalid response for queue ${queue}: status ${response.status}`);
+    console.warn(`${LOG_PREFIX.API} ⚠️ Invalid response for queue ${queue}: status ${response.status}`);
     return null;
   } catch (error) {
-    console.error(`[API] ❌ Error fetching schedule for queue ${queue}:`, error.message);
-    console.error(`[API] Error code:`, error.code);
-    console.error(`[API] Full error:`, error);
+    if (error.response) {
+      // Server responded with error status
+      console.error(`${LOG_PREFIX.API} ❌ Server error for queue ${queue}: ${error.response.status}`);
+    } else if (error.request) {
+      // No response received
+      console.error(`${LOG_PREFIX.API} ❌ No response from server for queue ${queue}`);
+    } else {
+      // Request setup error
+      console.error(`${LOG_PREFIX.API} ❌ Request error for queue ${queue}:`, error.message);
+    }
     return null;
   }
 }
@@ -43,19 +54,19 @@ export async function fetchSchedule(queue) {
 export async function fetchMultipleSchedules(queues) {
   const results = {};
 
-  console.log(`[API] Fetching schedules for ${queues.length} queues:`, queues);
+  console.log(`${LOG_PREFIX.API} Fetching schedules for ${queues.length} queues:`, queues);
 
-  // Fetch in parallel with a small delay to avoid hammering the API
+  // Fetch in parallel
   const promises = queues.map((queue) =>
     fetchSchedule(queue).then((schedule) => {
       results[queue] = schedule;
-      console.log(`[API] Queued result for ${queue}:`, schedule ? 'success' : 'failed');
+      console.log(`${LOG_PREFIX.API} Result for ${queue}:`, schedule ? 'success' : 'failed');
     })
   );
 
   await Promise.all(promises);
 
-  console.log(`[API] All fetches completed, results:`, Object.keys(results));
+  console.log(`${LOG_PREFIX.API} All fetches completed`);
   return results;
 }
 

@@ -72,19 +72,9 @@ export function formatScheduleText(rawSchedule, queue) {
   // Handle new API format (array with queues object) - MULTI-DAY SUPPORT
   if (Array.isArray(rawSchedule) && rawSchedule.length > 0) {
     let fullText = `⚡ Черга ${queue}:\n\n`;
-    let hasAnyOutages = false;
 
-    const sortedSchedule = [...rawSchedule].sort((a, b) => {
-      if (!a.eventDate || !b.eventDate) return 0;
-      
-      const [dayA, monthA, yearA] = a.eventDate.split('.').map(Number);
-      const [dayB, monthB, yearB] = b.eventDate.split('.').map(Number);
-      
-      const dateA = new Date(yearA, monthA - 1, dayA);
-      const dateB = new Date(yearB, monthB - 1, dayB);
-      
-      return dateA - dateB;
-    });
+    // Sort schedule by date
+    const sortedSchedule = sortScheduleByDate(rawSchedule);
 
     for (const daySchedule of sortedSchedule) {
       if (!daySchedule || !daySchedule.queues || !daySchedule.queues[queue]) {
@@ -100,10 +90,9 @@ export function formatScheduleText(rawSchedule, queue) {
       if (!Array.isArray(scheduleForQueue) || scheduleForQueue.length === 0) {
         fullText += `🟢 Відключення не заплановані\n`;
       } else {
-        hasAnyOutages = true;
         // Format outages
         scheduleForQueue.forEach((outage) => {
-          const status = outage.status === 1 ? '🔴' : '🟢';
+          const status = outage.status === OUTAGE_STATUS.SCHEDULED ? '🔴' : '🟢';
           const time = outage.shutdownHours || `${outage.from}-${outage.to}`;
           fullText += `${status} ${time}\n`;
         });
@@ -139,14 +128,16 @@ export function formatScheduleText(rawSchedule, queue) {
   return `⚡ Черга ${queue}: Немає доступних даних`;
 }
 
+import { VALID_QUEUES, OUTAGE_STATUS } from '../config/constants.js';
+import { sortScheduleByDate } from './dateUtils.js';
+
 /**
  * Validate queue identifier
  * @param {string} queue - Queue to validate
  * @returns {boolean} True if queue is valid
  */
 export function isValidQueue(queue) {
-  const validQueues = ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'];
-  return validQueues.includes(queue);
+  return VALID_QUEUES.includes(queue);
 }
 
 /**
@@ -163,5 +154,5 @@ export function filterValidQueues(queues) {
  * @returns {string[]} Array of all valid queue identifiers
  */
 export function getAllValidQueues() {
-  return ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'];
+  return [...VALID_QUEUES];
 }
