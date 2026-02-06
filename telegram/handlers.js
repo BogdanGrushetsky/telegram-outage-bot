@@ -135,6 +135,7 @@ export async function handleStatus(bot, msg, scheduleCache) {
     }
 
     await bot.sendMessage(chatId, statusText.trim(), {
+      parse_mode: 'HTML',
       reply_markup: getMainMenuKeyboard(),
     });
   } catch (error) {

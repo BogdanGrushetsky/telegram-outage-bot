@@ -209,7 +209,7 @@ export async function checkAndNotifyUpcomingOutages(bot) {
             const dateInfo = period.eventDate || '';
             const message = createUpcomingOutageMessage(queue, startTime, diffMinutes, dateInfo);
 
-            const success = await sendNotification(bot, user.telegramId, message);
+            const success = await sendNotification(bot, user.telegramId, message, { parse_mode: 'HTML' });
 
             if (success) {
               await markEventAsNotified(user, eventId);
@@ -333,7 +333,7 @@ export async function checkAndNotifyPowerReturns(bot) {
             const dateInfo = period.eventDate || '';
             const message = createPowerReturnMessage(queue, endTime, dateInfo);
 
-            const success = await sendNotification(bot, user.telegramId, message);
+            const success = await sendNotification(bot, user.telegramId, message, { parse_mode: 'HTML' });
 
             if (success) {
               await markEventAsNotified(user, eventId);
