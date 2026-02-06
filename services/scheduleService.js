@@ -157,6 +157,12 @@ export async function processQueueSchedule(queue) {
     const oldHash = cacheEntry ? cacheEntry.hash?.substring(0, 8) : 'none';
     const newHashShort = newHash.substring(0, 8);
 
+    // Check if we're in midnight window (00:00 - 00:20) to avoid false positives
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const isMidnightWindow = currentHour === 0 && currentMinute < 20;
+
     console.log(`${LOG_PREFIX.SCHEDULER} 📢 Schedule ${isFirstTime ? 'initialized' : 'CHANGED'} for queue ${queue}`);
     console.log(`${LOG_PREFIX.SCHEDULER} Hash: ${oldHash}... → ${newHashShort}...`);
 
@@ -168,10 +174,19 @@ export async function processQueueSchedule(queue) {
 
     console.log(`${LOG_PREFIX.SCHEDULER} Cache updated for queue ${queue}`);
 
-    result.schedule = newSchedule;
-    result.hash = newHash;
-    result.changed = !isFirstTime;
-    result.isFirstTime = isFirstTime;
+    // If we're in midnight window, don't mark as changed to avoid false notifications
+    if (isMidnightWindow && !isFirstTime) {
+      console.log(`${LOG_PREFIX.SCHEDULER} ⏰ Midnight window detected - suppressing change notification`);
+      result.schedule = newSchedule;
+      result.hash = newHash;
+      result.changed = false;
+      result.isFirstTime = false;
+    } else {
+      result.schedule = newSchedule;
+      result.hash = newHash;
+      result.changed = !isFirstTime;
+      result.isFirstTime = isFirstTime;
+    }
 
   } catch (error) {
     console.error(`${LOG_PREFIX.SCHEDULER} Error processing queue ${queue}:`, error.message);

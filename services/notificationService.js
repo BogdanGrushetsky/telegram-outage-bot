@@ -156,7 +156,7 @@ function delay(ms) {
  * @returns {string} Notification message
  */
 export function createScheduleUpdateMessage(scheduleText) {
-  return `� <b>Оновлення графіку відключень</b>\n\n${scheduleText}`;
+  return `📢 <b>Оновлення графіку відключень</b>\n\n${scheduleText}`;
 }
 
 /**
