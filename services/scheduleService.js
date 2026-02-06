@@ -130,19 +130,27 @@ export async function processQueueSchedule(queue) {
 
     const cacheEntry = await ScheduleCache.findOne({ queue });
 
-    if (cacheEntry && cacheEntry.hash === newHash) {
-      console.log(`${LOG_PREFIX.SCHEDULER} ✓ No changes for queue ${queue} (hash match)`);
+    // Compare hashes correctly by filtering old cache too
+    if (cacheEntry && cacheEntry.rawSchedule) {
+      // Filter old cached schedule with current date to avoid false positives at midnight
+      const oldFilteredSchedule = filterFutureDays(cacheEntry.rawSchedule);
+      const oldOutageDataOnly = extractOutageDataOnly(oldFilteredSchedule);
+      const oldHash = hashSchedule(oldOutageDataOnly);
 
-      // Update rawSchedule but keep same hash
-      await ScheduleCache.findOneAndUpdate(
-        { queue },
-        { rawSchedule: newSchedule, updatedAt: new Date() }
-      );
+      if (oldHash === newHash) {
+        console.log(`${LOG_PREFIX.SCHEDULER} ✓ No changes for queue ${queue} (hash match after filtering)`);
 
-      result.schedule = newSchedule;
-      result.hash = newHash;
-      result.changed = false;
-      return result;
+        // Update rawSchedule and hash with new data
+        await ScheduleCache.findOneAndUpdate(
+          { queue },
+          { rawSchedule: newSchedule, hash: newHash, updatedAt: new Date() }
+        );
+
+        result.schedule = newSchedule;
+        result.hash = newHash;
+        result.changed = false;
+        return result;
+      }
     }
 
     const isFirstTime = !cacheEntry;

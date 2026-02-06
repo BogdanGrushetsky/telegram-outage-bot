@@ -156,7 +156,7 @@ function delay(ms) {
  * @returns {string} Notification message
  */
 export function createScheduleUpdateMessage(scheduleText) {
-  return `📢 Оновлення графіку відключень\n\n${scheduleText}`;
+  return `� <b>Оновлення графіку відключень</b>\n\n${scheduleText}`;
 }
 
 /**
@@ -168,8 +168,8 @@ export function createScheduleUpdateMessage(scheduleText) {
  * @returns {string} Notification message
  */
 export function createUpcomingOutageMessage(queue, startTime, minutesBefore, dateInfo = '') {
-  const dateLine = dateInfo ? `\n📅 Дата: ${dateInfo}` : '';
-  return `⏰ Увага! Відключення світла\n\n⚡ Черга: ${queue}${dateLine}\n🕐 Початок: ${startTime}\n⏳ Залишилось: ${minutesBefore} хв`;
+  const dateLine = dateInfo ? `\n📅 Дата: <code>${dateInfo}</code>` : '';
+  return `⏰ <b>Увага! Відключення світла</b>\n━━━━━━━━━━━━━━━━\n\n⚡️ Черга: <b>${queue}</b>${dateLine}\n🕐 Початок: <code>${startTime}</code>\n⏳ Залишилось: <b>${minutesBefore} хв</b>`;
 }
 
 /**
@@ -180,8 +180,8 @@ export function createUpcomingOutageMessage(queue, startTime, minutesBefore, dat
  * @returns {string} Notification message
  */
 export function createPowerReturnMessage(queue, endTime, dateInfo = '') {
-  const dateLine = dateInfo ? `\n📅 Дата: ${dateInfo}` : '';
-  return `✅ Світло повернулось!\n\n⚡ Черга: ${queue}${dateLine}\n🕐 Час: ${endTime}\n💡 Відключення завершено`;
+  const dateLine = dateInfo ? `\n📅 Дата: <code>${dateInfo}</code>` : '';
+  return `✅ <b>Світло повернулось!</b>\n━━━━━━━━━━━━━━━━\n\n⚡️ Черга: <b>${queue}</b>${dateLine}\n🕐 Час: <code>${endTime}</code>\n💡 <i>Відключення завершено</i>`;
 }
 
 export default {

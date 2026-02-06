@@ -71,7 +71,8 @@ export function generateEventId(queue, time, date = '') {
 export function formatScheduleText(rawSchedule, queue) {
   // Handle new API format (array with queues object) - MULTI-DAY SUPPORT
   if (Array.isArray(rawSchedule) && rawSchedule.length > 0) {
-    let fullText = `⚡ Черга ${queue}:\n\n`;
+    let fullText = `⚡️ <b>Черга ${queue}</b>\n`;
+    fullText += `━━━━━━━━━━━━━━━━\n\n`;
 
     // Sort schedule by date
     const sortedSchedule = sortScheduleByDate(rawSchedule);
@@ -84,25 +85,23 @@ export function formatScheduleText(rawSchedule, queue) {
       const scheduleForQueue = daySchedule.queues[queue];
       const eventDate = daySchedule.eventDate || 'Сьогодні';
 
-      fullText += `📅 ${eventDate}\n`;
+      fullText += `📅 <b>${eventDate}</b>\n\n`;
 
       // Check if there are any outages for this day
       if (!Array.isArray(scheduleForQueue) || scheduleForQueue.length === 0) {
-        fullText += `🟢 Відключення не заплановані\n`;
+        fullText += `   🟢 Відключення не заплановані\n\n`;
       } else {
         // Format outages
         scheduleForQueue.forEach((outage) => {
           const status = outage.status === OUTAGE_STATUS.SCHEDULED ? '🔴' : '🟢';
           const time = outage.shutdownHours || `${outage.from}-${outage.to}`;
-          fullText += `${status} ${time}\n`;
+          fullText += `   ${status} <code>${time}</code>\n\n`;
         });
-      }
 
-      if (daySchedule.scheduleApprovedSince) {
-        fullText += `✅ Затверджено: ${daySchedule.scheduleApprovedSince}\n`;
+        if (daySchedule.scheduleApprovedSince) {
+          fullText += `✅ <i>Затверджено: ${daySchedule.scheduleApprovedSince}</i>\n\n`;
+        }
       }
-
-      fullText += '\n';
     }
 
     return fullText.trim();
