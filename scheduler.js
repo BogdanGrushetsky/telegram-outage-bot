@@ -324,6 +324,20 @@ export async function checkAndNotifyPowerReturns(bot) {
           }
 
           if (shouldNotify) {
+            // Check if another outage starts at the same time (no actual power return)
+            const hasOverlappingOutage = allPeriodsToCheck.some(otherPeriod => {
+              const otherStartTime = extractStartTime(otherPeriod);
+              if (!otherStartTime) return false;
+              
+              // Check if another period starts exactly when this one ends
+              return otherStartTime === endTime && otherPeriod !== period;
+            });
+
+            if (hasOverlappingOutage) {
+              console.log(`${LOG_PREFIX.SCHEDULER} ⚠️ Skipping power return notification - another outage starts at ${endTime}`);
+              continue;
+            }
+
             const eventId = `power_return_${generateEventId(queue, endTime, period.eventDate)}`;
 
             if (isEventNotified(user, eventId)) {
