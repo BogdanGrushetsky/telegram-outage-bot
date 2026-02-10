@@ -180,16 +180,33 @@ export function formatScheduleWithChanges(schedule, queue, changes) {
     if (!Array.isArray(scheduleForQueue) || scheduleForQueue.length === 0) {
       fullText += `   🟢 Відключення не заплановані\n\n`;
     } else {
-      // Format outages
+      // First show removed periods (what was deleted from old schedule)
+      if (dateChanges?.removed && dateChanges.removed.length > 0) {
+        dateChanges.removed.forEach((removed) => {
+          const time = removed.shutdownHours || `${removed.from}-${removed.to}`;
+          
+          // Calculate duration for removed period
+          let duration = '';
+          if (removed.from && removed.to) {
+            const mins = calculateDuration(removed.from, removed.to);
+            duration = ` – на ${formatDuration(mins)}`;
+          } else if (removed.shutdownHours) {
+            const match = removed.shutdownHours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+            if (match) {
+              const mins = calculateDuration(match[1], match[2]);
+              duration = ` – на ${formatDuration(mins)}`;
+            }
+          }
+          
+          // Strikethrough for removed (deleted) periods
+          fullText += `   ❌ <s>${time}${duration}</s>\n\n`;
+        });
+      }
+
+      // Then show current/real outages (actual schedule)
       scheduleForQueue.forEach((outage) => {
         const time = outage.shutdownHours || `${outage.from}-${outage.to}`;
         
-        // Check if this is a new period
-        const isNew = dateChanges?.added?.some(p => {
-          const addedTime = p.shutdownHours || `${p.from}-${p.to}`;
-          return addedTime === time;
-        });
-
         // Calculate duration
         let duration = '';
         if (outage.from && outage.to) {
@@ -203,17 +220,10 @@ export function formatScheduleWithChanges(schedule, queue, changes) {
           }
         }
 
-        const status = isNew ? '🆕' : (outage.status === OUTAGE_STATUS.SCHEDULED ? '🔴' : '🟢');
-        fullText += `   ${status} <code>${time}</code>${duration}\n\n`;
+        // All real outages get red circle
+        fullText += `   🔴 ${time}${duration}\n\n`;
       });
-
-      // Show removed periods if any
-      if (dateChanges?.removed && dateChanges.removed.length > 0) {
-        dateChanges.removed.forEach((removed) => {
-          const time = removed.shutdownHours || `${removed.from}-${removed.to}`;
-          fullText += `   ❌ <code>${time}</code> <i>(скасовано)</i>\n\n`;
-        });
-      }
+      
 
       if (daySchedule.scheduleApprovedSince) {
         fullText += `✅ <i>Затверджено: ${daySchedule.scheduleApprovedSince}</i>\n\n`;
