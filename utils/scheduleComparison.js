@@ -42,9 +42,9 @@ export function formatDuration(minutes) {
   if (hours === 0) {
     return `${mins}хв`;
   } else if (mins === 0) {
-    return `${hours}год`;
+    return `${hours} год`;
   } else {
-    return `${hours}год ${mins}хв`;
+    return `${hours} год ${mins} хв`;
   }
 }
 
