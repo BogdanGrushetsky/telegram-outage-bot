@@ -5,6 +5,7 @@
 
 import cron from 'node-cron';
 import { formatScheduleText, generateEventId } from './utils/helpers.js';
+import { compareSchedules, formatScheduleWithChanges } from './utils/scheduleComparison.js';
 import { LOG_PREFIX, TIMING } from './config/constants.js';
 import {
   getTodayString,
@@ -80,7 +81,7 @@ async function updateAllSchedules(bot) {
 
     if (changedQueues.length > 0) {
       console.log(`${LOG_PREFIX.SCHEDULER} 📨 Notifying users about ${changedQueues.length} changed queues:`, changedQueues);
-      await notifyUsersAboutChanges(bot, changedQueues);
+      await notifyUsersAboutChanges(bot, results);
     } else {
       console.log(`${LOG_PREFIX.SCHEDULER} ✓ No schedule changes detected`);
     }
@@ -95,10 +96,14 @@ async function updateAllSchedules(bot) {
 /**
  * Notify users about schedule changes for specific queues
  * @param {Object} bot - Telegram bot instance
- * @param {Array} changedQueues - Array of changed queue IDs
+ * @param {Array} results - Array of processing results with oldSchedule
  */
-async function notifyUsersAboutChanges(bot, changedQueues) {
+async function notifyUsersAboutChanges(bot, results) {
   try {
+    // Filter only changed queues
+    const changedResults = results.filter(r => r.changed && !r.isFirstTime);
+    const changedQueues = changedResults.map(r => r.queue);
+    
     const users = await getNotificationEnabledUsers();
     console.log(`${LOG_PREFIX.SCHEDULER} Found ${users.length} users with notifications enabled`);
 
@@ -114,14 +119,30 @@ async function notifyUsersAboutChanges(bot, changedQueues) {
       console.log(`${LOG_PREFIX.SCHEDULER} User ${user.telegramId} subscribed to ${userChangedQueues.length} changed queues:`, userChangedQueues);
 
       for (const queue of userChangedQueues) {
-        const schedule = await getCachedSchedule(queue);
+        const result = changedResults.find(r => r.queue === queue);
+        if (!result) continue;
+
+        const schedule = result.schedule;
+        const oldSchedule = result.oldSchedule;
 
         if (!schedule) {
-          console.warn(`${LOG_PREFIX.SCHEDULER} No cache found for queue ${queue}`);
+          console.warn(`${LOG_PREFIX.SCHEDULER} No new schedule found for queue ${queue}`);
           continue;
         }
 
-        const scheduleText = formatScheduleText(schedule, queue);
+        let scheduleText;
+        if (oldSchedule && Array.isArray(oldSchedule)) {
+          // We have old schedule to compare
+          const { filterFutureDays } = await import('./services/scheduleService.js');
+          const oldFiltered = filterFutureDays(oldSchedule);
+          const newFiltered = filterFutureDays(schedule);
+          const changes = compareSchedules(oldFiltered, newFiltered, queue);
+          scheduleText = formatScheduleWithChanges(schedule, queue, changes);
+        } else {
+          // No old schedule, use regular formatting
+          scheduleText = formatScheduleText(schedule, queue);
+        }
+
         const message = createScheduleUpdateMessage(scheduleText);
 
         const success = await sendNotification(bot, user.telegramId, message, { parse_mode: 'HTML' });

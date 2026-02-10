@@ -91,12 +91,13 @@ export function filterFutureDays(schedule) {
 /**
  * Process a single queue schedule
  * @param {string} queue - Queue ID
- * @returns {Promise<Object>} Result object with queue, schedule, hash, and changed flag
+ * @returns {Promise<Object>} Result object with queue, schedule, hash, changed flag, and oldSchedule
  */
 export async function processQueueSchedule(queue) {
   const result = {
     queue,
     schedule: null,
+    oldSchedule: null,
     hash: null,
     changed: false,
     isFirstTime: false,
@@ -157,6 +158,9 @@ export async function processQueueSchedule(queue) {
     const oldHash = cacheEntry ? cacheEntry.hash?.substring(0, 8) : 'none';
     const newHashShort = newHash.substring(0, 8);
 
+    // Save old schedule for comparison
+    const oldRawSchedule = cacheEntry?.rawSchedule || null;
+
     // Check if we're in midnight window (00:00 - 00:20) to avoid false positives
     const now = new Date();
     const currentHour = now.getHours();
@@ -178,11 +182,13 @@ export async function processQueueSchedule(queue) {
     if (isMidnightWindow && !isFirstTime) {
       console.log(`${LOG_PREFIX.SCHEDULER} ⏰ Midnight window detected - suppressing change notification`);
       result.schedule = newSchedule;
+      result.oldSchedule = oldRawSchedule;
       result.hash = newHash;
       result.changed = false;
       result.isFirstTime = false;
     } else {
       result.schedule = newSchedule;
+      result.oldSchedule = oldRawSchedule;
       result.hash = newHash;
       result.changed = !isFirstTime;
       result.isFirstTime = isFirstTime;

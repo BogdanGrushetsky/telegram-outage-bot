@@ -95,7 +95,21 @@ export function formatScheduleText(rawSchedule, queue) {
         scheduleForQueue.forEach((outage) => {
           const status = outage.status === OUTAGE_STATUS.SCHEDULED ? '🔴' : '🟢';
           const time = outage.shutdownHours || `${outage.from}-${outage.to}`;
-          fullText += `   ${status} <code>${time}</code>\n\n`;
+          
+          // Calculate duration
+          let duration = '';
+          if (outage.from && outage.to) {
+            const mins = calculateDuration(outage.from, outage.to);
+            duration = ` – на ${formatDuration(mins)}`;
+          } else if (outage.shutdownHours) {
+            const match = outage.shutdownHours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+            if (match) {
+              const mins = calculateDuration(match[1], match[2]);
+              duration = ` – на ${formatDuration(mins)}`;
+            }
+          }
+          
+          fullText += `   ${status} <code>${time}</code>${duration}\n\n`;
         });
 
         if (daySchedule.scheduleApprovedSince) {
@@ -129,6 +143,7 @@ export function formatScheduleText(rawSchedule, queue) {
 
 import { VALID_QUEUES, OUTAGE_STATUS } from '../config/constants.js';
 import { sortScheduleByDate } from './dateUtils.js';
+import { calculateDuration, formatDuration } from './scheduleComparison.js';
 
 /**
  * Validate queue identifier
