@@ -7,8 +7,10 @@ export const TIMING = {
   INITIAL_STARTUP_DELAY: 5000, // 5 seconds
   API_REQUEST_DELAY: 500, // 500ms between API requests
   NOTIFICATION_DELAY: 100, // 100ms between notifications
-  POWER_RETURN_CHECK_WINDOW: 2, // 2 minutes window for power return
+  POWER_RETURN_CHECK_WINDOW: 15, // 15 minutes window for power return (protects against server restarts)
+  POWER_RETURN_MAX_DELAY: 60, // Maximum 60 minutes delay for power return notification
   NOTIFICATION_RETENTION_HOURS: 48, // Keep notifications for 48 hours
+  NOTIFIED_EVENTS_MAX_AGE_HOURS: 24, // Clean notified events older than 24 hours
   MIDNIGHT_HOUR: 0, // Midnight transition hour
   EARLY_MORNING_CUTOFF: 1, // 1 AM cutoff for midnight transitions
 };

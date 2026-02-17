@@ -22,6 +22,7 @@ import {
   markEventAsNotified,
   isEventNotified,
   cleanOldNotifications as cleanOldNotificationsService,
+  cleanOldNotifiedEvents as cleanOldNotifiedEventsService,
   createScheduleUpdateMessage,
   createUpcomingOutageMessage,
   createPowerReturnMessage,
@@ -52,6 +53,12 @@ export function initializeScheduler(bot) {
     console.log(`${LOG_PREFIX.SCHEDULER} Running schedule update cycle...`);
     await updateAllSchedules(bot);
   });
+
+  // Clean old notified events on startup
+  setTimeout(async () => {
+    console.log(`${LOG_PREFIX.SCHEDULER} Cleaning old notified events on startup...`);
+    await cleanOldNotifiedEventsService(TIMING.NOTIFIED_EVENTS_MAX_AGE_HOURS);
+  }, 2000);
 
   // Run immediately on startup to populate cache
   setTimeout(() => {
@@ -299,6 +306,7 @@ export async function checkAndNotifyPowerReturns(bot) {
                   allPeriodsToCheck.push({
                     ...period,
                     eventDate: eventDate,
+                    isYesterdayEvent: eventDate !== todayStr, // Mark if this is from yesterday
                   });
                 });
               }
@@ -306,7 +314,7 @@ export async function checkAndNotifyPowerReturns(bot) {
           }
         } else if (schedule?.data) {
           // Old format support
-          allPeriodsToCheck.push(...schedule.data.map(p => ({ ...p, eventDate: todayStr })));
+          allPeriodsToCheck.push(...schedule.data.map(p => ({ ...p, eventDate: todayStr, isYesterdayEvent: false })));
         }
 
         if (allPeriodsToCheck.length === 0) {
@@ -327,21 +335,41 @@ export async function checkAndNotifyPowerReturns(bot) {
           }
 
           let shouldNotify = false;
+          let diffMinutes = 0;
 
-          // Handle midnight transitions
-          if (isEarlyMorning(endMinutes, 60)) {
-            const diffMinutes = currentMinutes - endMinutes;
+          // Handle midnight transitions for yesterday's events that end after midnight
+          if (period.isYesterdayEvent && isEarlyMorning(endMinutes, 60) && currentHour === 0) {
+            // Outage from yesterday ends in early morning (00:00-01:00) today
+            diffMinutes = currentMinutes - endMinutes;
 
             if (diffMinutes >= 0 && diffMinutes <= TIMING.POWER_RETURN_CHECK_WINDOW) {
               shouldNotify = true;
-              console.log(`${LOG_PREFIX.SCHEDULER} Midnight transition detected: end=${endTime}, current=${formatCurrentTime(now)}, diff=${diffMinutes}min`);
+              console.log(`${LOG_PREFIX.SCHEDULER} Yesterday's outage midnight transition: end=${endTime}, current=${formatCurrentTime(now)}, diff=${diffMinutes}min`);
+            } else if (diffMinutes > TIMING.POWER_RETURN_CHECK_WINDOW && diffMinutes <= TIMING.POWER_RETURN_MAX_DELAY) {
+              console.log(`${LOG_PREFIX.SCHEDULER} ⚠️ Yesterday's outage ended ${diffMinutes}min ago (midnight) - possibly missed due to restart`);
+              shouldNotify = true;
+            }
+          } else if (!period.isYesterdayEvent) {
+            // Normal case - today's event
+            diffMinutes = currentMinutes - endMinutes;
+
+            if (diffMinutes >= 0 && diffMinutes <= TIMING.POWER_RETURN_CHECK_WINDOW) {
+              shouldNotify = true;
+            } else if (diffMinutes > TIMING.POWER_RETURN_CHECK_WINDOW && diffMinutes <= TIMING.POWER_RETURN_MAX_DELAY) {
+              // Power returned a while ago - likely missed due to server restart
+              console.log(`${LOG_PREFIX.SCHEDULER} ⚠️ Outage ended ${diffMinutes}min ago - possibly missed due to restart`);
+              shouldNotify = true;
             }
           } else {
-            const diffMinutes = currentMinutes - endMinutes;
+            // Yesterday's event but not in early morning window - skip
+            console.log(`${LOG_PREFIX.SCHEDULER} ⏭️ Skipping yesterday's event outside midnight window`);
+            shouldNotify = false;
+          }
 
-            if (diffMinutes >= 0 && diffMinutes <= TIMING.POWER_RETURN_CHECK_WINDOW) {
-              shouldNotify = true;
-            }
+          // Additional safety check: don't notify about events that ended more than max delay ago
+          if (diffMinutes > TIMING.POWER_RETURN_MAX_DELAY) {
+            console.log(`${LOG_PREFIX.SCHEDULER} ⏭️ Skipping old event: ended ${diffMinutes}min ago (too old)`);
+            shouldNotify = false;
           }
 
           if (shouldNotify) {

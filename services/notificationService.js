@@ -101,6 +101,54 @@ export async function cleanOldNotifications(hoursToKeep = 48) {
 }
 
 /**
+ * Clean notified events older than specified hours from ALL users
+ * This is more aggressive and runs on startup to ensure clean state
+ * @param {number} hoursToKeep - How many hours of events to keep (default: 24)
+ * @returns {Promise<number>} Number of users updated
+ */
+export async function cleanOldNotifiedEvents(hoursToKeep = 24) {
+  try {
+    console.log(`${LOG_PREFIX.NOTIFICATION} Cleaning notified events older than ${hoursToKeep} hours...`);
+    
+    // Parse event IDs to extract timestamps and filter old ones
+    const users = await User.find({ notifiedEvents: { $exists: true, $ne: [] } });
+    let updatedCount = 0;
+
+    for (const user of users) {
+      const originalCount = user.notifiedEvents.length;
+      
+      // Filter out events that are clearly old based on date in event ID
+      const now = new Date();
+      const cutoffDate = new Date(now.getTime() - hoursToKeep * 60 * 60 * 1000);
+      
+      user.notifiedEvents = user.notifiedEvents.filter(eventId => {
+        // Try to extract date from event ID (format: queue_time_date or power_return_queue_time_date)
+        const dateMatch = eventId.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        if (dateMatch) {
+          const [, day, month, year] = dateMatch;
+          const eventDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          return eventDate >= cutoffDate;
+        }
+        // Keep events without date (shouldn't happen but safe default)
+        return true;
+      });
+
+      if (user.notifiedEvents.length !== originalCount) {
+        await user.save();
+        updatedCount++;
+        console.log(`${LOG_PREFIX.NOTIFICATION} Cleaned ${originalCount - user.notifiedEvents.length} old events for user ${user.telegramId}`);
+      }
+    }
+
+    console.log(`${LOG_PREFIX.NOTIFICATION} ✅ Cleaned notified events for ${updatedCount} users`);
+    return updatedCount;
+  } catch (error) {
+    console.error(`${LOG_PREFIX.NOTIFICATION} Error cleaning old notified events:`, error);
+    return 0;
+  }
+}
+
+/**
  * Get users with notifications enabled
  * @param {Object} [filter={}] - Additional filter criteria
  * @returns {Promise<Array>} Array of user documents
@@ -190,6 +238,7 @@ export default {
   markEventAsNotified,
   isEventNotified,
   cleanOldNotifications,
+  cleanOldNotifiedEvents,
   getNotificationEnabledUsers,
   filterUsersByQueues,
   getUserChangedQueues,
