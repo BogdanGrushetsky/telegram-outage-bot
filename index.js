@@ -7,6 +7,11 @@ import cron from 'node-cron';
 
 dotenv.config();
 
+// Silence verbose logs in production — errors and warnings still show
+if (process.env.NODE_ENV === 'production') {
+  console.log = () => {};
+}
+
 // Configuration
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/power-outage-bot';
