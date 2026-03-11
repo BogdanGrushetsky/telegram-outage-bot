@@ -43,12 +43,17 @@ export const EVENT_TYPES = {
 
 // Log prefixes
 export const LOG_PREFIX = {
+  MAIN: '[Main]',
   SCHEDULER: '[Scheduler]',
   NOTIFICATION: '[Notification]',
   API: '[API]',
   DATABASE: '[Database]',
   BOT: '[Bot]',
+  HANDLERS: '[Handlers]',
 };
+
+// External API
+export const SCHEDULE_API_BASE_URL = process.env.SCHEDULE_API_URL || 'https://be-svitlo.oe.if.ua';
 
 // Outage status
 export const OUTAGE_STATUS = {
@@ -65,4 +70,5 @@ export default {
   EVENT_TYPES,
   LOG_PREFIX,
   OUTAGE_STATUS,
+  SCHEDULE_API_BASE_URL,
 };

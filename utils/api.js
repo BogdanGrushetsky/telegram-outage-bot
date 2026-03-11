@@ -1,7 +1,7 @@
 import axios from 'axios';
-import { LOG_PREFIX } from '../config/constants.js';
+import { LOG_PREFIX, SCHEDULE_API_BASE_URL } from '../config/constants.js';
 
-const API_BASE_URL = 'https://be-svitlo.oe.if.ua';
+const API_BASE_URL = SCHEDULE_API_BASE_URL;
 const API_TIMEOUT = 10000; // 10 seconds
 
 /**

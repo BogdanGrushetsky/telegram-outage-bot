@@ -22,6 +22,10 @@ function validateConfig() {
     process.exit(1);
   }
 
+  if (!process.env.MONGODB_URI) {
+    console.warn('⚠️  MONGODB_URI is not set, using default localhost');
+  }
+
   console.log('✅ Configuration validated');
   console.log(`   - Schedule update interval: ${SCHEDULE_UPDATE_INTERVAL / 60000} minutes`);
 }
@@ -97,8 +101,9 @@ async function start() {
   console.log('  /timers   - Керувати таймерами сповіщень');
   console.log('  /status   - Перевірити поточний статус');
   console.log('  /settings - Налаштування бота\n');
+  const maskedUri = MONGODB_URI.replace(/:([^@/]+)@/, ':****@');
   console.log(`[Main] Bot token: ${TELEGRAM_BOT_TOKEN.substring(0, 10)}...`);
-  console.log(`[Main] Database: ${MONGODB_URI}`);
+  console.log(`[Main] Database: ${maskedUri}`);
   console.log(`[Main] API Port: ${API_PORT}`);
   console.log(`[Main] Update interval: ${SCHEDULE_UPDATE_INTERVAL / 60000} minutes\n`);
 }
