@@ -15,7 +15,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install dumb-init for signal handling and wget for health checks
-RUN apk add --no-cache dumb-init wget
+RUN apk add --no-cache dumb-init wget tzdata
 
 # Copy from builder
 COPY --from=builder /app/node_modules ./node_modules
